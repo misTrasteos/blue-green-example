@@ -1,0 +1,122 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: wso2-micro-integrator-service
+  labels:
+    app: wso2-micro-integrator
+spec:
+  selector:
+    app: wso2-micro-integrator
+  ports:
+  - name: http
+    port: 8290
+    targetPort: 8290
+    protocol: TCP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wso2-micro-integrator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: wso2-micro-integrator
+  template:
+    metadata:
+      labels:
+        app: wso2-micro-integrator 
+    spec:
+      containers:
+      - name: wso2-micro-integrator
+        image: docker.io/wso2/wso2mi:4.0.0
+        ports:
+        - name: http
+          containerPort: 8290
+          protocol: TCP    
+        volumeMounts:
+        - name: wso2-micro-integrator-api-volume
+          mountPath: /home/wso2carbon/wso2mi-4.0.0/repository/deployment/server/synapse-configs/default/api/backend.xml
+          subPath: backend.xml
+      - name: ambassor
+        image: docker.io/nginx:1-alpine-slim
+        ports:
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+        volumeMounts:
+        - name: nginx-conf-volume
+          mountPath: /etc/nginx/nginx.conf
+          subPath: nginx.conf
+      volumes:
+      - name: wso2-micro-integrator-api-volume
+        configMap:
+          name: wso2-micro-integrator-api-configmap
+          items:
+          - key: backend.xml
+            path: backend.xml
+      - name: nginx-conf-volume
+        configMap:
+          name: nginx-conf-configmap
+          items:
+          - key: nginx.conf
+            path: nginx.conf
+---     
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: wso2-micro-integrator-api-configmap
+data:
+  backend.xml: |
+    <?xml version="1.0" encoding="UTF-8"?>
+    <api context="/backend" name="backend" xmlns="http://ws.apache.org/ns/synapse">
+      <resource methods="GET">
+        <inSequence>
+          <send>
+              <endpoint>
+                  <address uri="http://localhost:8080/backend"/>
+              </endpoint>
+          </send>
+        </inSequence>
+        <outSequence>
+          <respond/>
+        </outSequence>
+        <faultSequence/>
+      </resource>
+    </api>
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-conf-configmap
+data:
+  nginx.conf: |
+    events {}
+
+    http {
+      map $http_color $selected_upstream{
+        default blue_upstream;
+
+        blue    blue_upstream;
+        green   green_upstream;
+      }
+
+      upstream blue_upstream {
+        server blue-service:10000;
+      }
+
+      upstream green_upstream {
+        server green-service:10000;
+      }
+
+      server {
+        listen       8080;
+        server_name  localhost;
+
+        location /backend {
+          proxy_set_header  test "nginx";
+          proxy_pass        http://$selected_upstream;
+        }
+      }
+    }

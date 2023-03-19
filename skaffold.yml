@@ -1,0 +1,14 @@
+apiVersion: skaffold/v2beta23
+kind: Config
+metadata:
+  name: blue-green-example
+deploy:
+  kubectl:
+    manifests:
+    - k8s/*.yml
+portForward:
+# wso2-micro-integrator
+- resourceType: service
+  resourceName: wso2-micro-integrator-service
+  port: 8290
+  localPort: 8290
